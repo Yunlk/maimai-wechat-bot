@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  # ============= Gewechat (微信 iPad 协议) =============
+  gewechat:
+    image: gewechat/gewechat:latest
+    container_name: gewechat
+    restart: unless-stopped
+    ports:
+      - "2531:2531"
+    volumes:
+      - gewechat_data:/root
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ============= maimaiDX 查分机器人 =============
+  maimai-bot:
+    build: .
+    container_name: maimai-bot
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - ./static:/app/static:ro    # 静态资源（曲绘、字体等）只读挂载
+      - bot_data:/app/static/data  # 数据文件读写
+      - bot_logs:/app/logs
+    depends_on:
+      - gewechat
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+volumes:
+  gewechat_data:
+  bot_data:
+  bot_logs:
