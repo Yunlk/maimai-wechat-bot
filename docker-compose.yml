@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # ============= Gewechat (微信 iPad 协议) =============
   gewechat:
