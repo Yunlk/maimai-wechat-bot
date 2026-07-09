@@ -1,31 +1,29 @@
 """
 消息处理器 — 指令路由 + 查分逻辑
+WeChatFerry 版本
 """
 import asyncio
 import base64
 import os
 import tempfile
+import time
 
-from io import BytesIO
+from wcferry.wxmsg import WxMsg
 
-from PIL import Image
-
-from .config import maiconfig
+from .config import botconfig, maiconfig
 from .core.image import PlayerBest50
-from .core.merge.models import Best50, Player, ServiceName, Theme
+from .core.merge.models import ServiceName, Theme
 from .core.service import mai
 from .database import delete_user, get_user, save_user
-from .query import diving_fish_query, lxns_query
 from .log import logger
 from .models import User
-from .resources import cover_dir
+from .query import diving_fish_query, lxns_query
 
 
 class MessageHandler:
-    """消息处理器"""
+    """消息处理器 — 返回文本或图片路径"""
 
-    def __init__(self, gewechat_client):
-        self.gewe = gewechat_client
+    def __init__(self):
         self._init_lock = asyncio.Lock()
         self._initialized = False
 
@@ -42,16 +40,17 @@ class MessageHandler:
             except Exception as e:
                 logger.error(f"数据初始化失败: {e}")
 
-    async def handle(self, msg: dict) -> str | None:
+    def handle(self, msg: WxMsg) -> str | None:
         """
-        处理一条消息，返回要回复的文本或图片路径
+        同步分发入口（handler 内部用 asyncio.run 跑异步命令）
+        返回: 文本字符串, 图片文件路径, 或 None
         """
-        await self.init_data()
+        if not msg.is_text():
+            return None
+        if msg.from_self():
+            return None
 
-        data = msg.get("data") or msg
-        content = data.get("content", "").strip()
-        from_wxid = data.get("fromWxid", "")
-
+        content = msg.content.strip()
         if not content:
             return None
 
@@ -59,41 +58,46 @@ class MessageHandler:
         cmd = parts[0].lower()
         args = parts[1].strip() if len(parts) > 1 else ""
 
-        # ==================== 帮助 ====================
+        # 用户标识：群聊用 sender（群成员 wxid），单聊也用 sender
+        user_id = msg.sender
+
+        # ── 帮助 ──
         if cmd in ("/help", "/帮助", "/maimai"):
             return self._cmd_help()
 
-        # ==================== 绑定 ====================
+        # ── 绑定 ──
         if cmd in ("/bind", "/绑定"):
-            return await self._cmd_bind(from_wxid, args)
+            return asyncio.run(self._cmd_bind(user_id, args))
 
-        # ==================== 解绑 ====================
+        # ── 解绑 ──
         if cmd in ("/unbind", "/解绑"):
-            return await self._cmd_unbind(from_wxid)
+            return asyncio.run(self._cmd_unbind(user_id))
 
-        # ==================== 查看绑定 ====================
+        # ── 查看绑定 ──
         if cmd in ("/config", "/配置", "/绑定信息"):
-            return await self._cmd_config(from_wxid)
+            return asyncio.run(self._cmd_config(user_id))
 
-        # ==================== 查分 ====================
+        # ── 查分 ──
         if cmd in ("/b50", "/b40", "/查分"):
-            return await self._cmd_b50_bind(from_wxid, args)
+            return asyncio.run(self._cmd_b50(user_id, args))
 
-        # ==================== 歌曲搜索 ====================
+        # ── 歌曲搜索 ──
         if cmd in ("/search", "/搜歌", "/find"):
             return self._cmd_search(args)
 
-        # ==================== 随机 ====================
+        # ── 随机 ──
         if cmd in ("/random", "/来一首", "/随"):
             return self._cmd_random()
 
-        # ==================== ping ====================
+        # ── ping ──
         if cmd == "/ping":
             return "pong! 🎵 maimaiDX Bot is running."
 
         return None
 
-    # ---- 命令实现 ----
+    # ════════════════════════════════════
+    #  命令实现
+    # ════════════════════════════════════
 
     def _cmd_help(self) -> str:
         return (
@@ -112,10 +116,9 @@ class MessageHandler:
             f"Powered by {maiconfig.bot_name}"
         )
 
-    # ---- 绑定 / 解绑 / 配置 ----
+    # ── 绑定 / 解绑 / 配置 ──
 
-    async def _cmd_bind(self, wxid: str, args: str) -> str:
-        """绑定水鱼查分器用户名"""
+    async def _cmd_bind(self, user_id: str, args: str) -> str:
         if not args:
             return (
                 "使用方法:\n"
@@ -125,35 +128,31 @@ class MessageHandler:
                 "/bind yun5k\n"
                 "/bind yun5k my_divingfish_token"
             )
-
         parts = args.split(maxsplit=1)
         username = parts[0].strip()
         token = parts[1].strip() if len(parts) > 1 else None
 
-        await save_user(wxid, df_username=username, df_token=token)
+        await save_user(user_id, df_username=username, df_token=token)
 
         msg = f"✅ 绑定成功!\n用户名: {username}"
         if token:
-            msg += f"\n个人 Token 已设置"
+            msg += "\n个人 Token 已设置"
         msg += "\n现在可以直接用 /b50 查分，无需每次输入用户名"
         return msg
 
-    async def _cmd_unbind(self, wxid: str) -> str:
-        """解除绑定"""
-        deleted = await delete_user(wxid)
+    async def _cmd_unbind(self, user_id: str) -> str:
+        deleted = await delete_user(user_id)
         if deleted:
             return "✅ 已解除绑定"
         return "⚠️ 你还没有绑定过，无需解绑"
 
-    async def _cmd_config(self, wxid: str) -> str:
-        """查看当前绑定信息"""
-        user = await get_user(wxid)
+    async def _cmd_config(self, user_id: str) -> str:
+        user = await get_user(user_id)
         if not user:
             return (
                 "你还没有绑定查分器账号\n\n"
                 "请使用 /bind <用户名> 绑定"
             )
-
         lines = [
             "📋 当前绑定信息",
             f"用户名:   {user['df_username'] or '未设置'}",
@@ -163,19 +162,14 @@ class MessageHandler:
         ]
         return "\n".join(lines)
 
-    # ---- 查分 ----
+    # ── 查分 ──
 
-    async def _cmd_b50_bind(self, wxid: str, args: str) -> str:
-        """查 B50，优先使用绑定信息"""
-        # 1. 解析参数：看是否指定了用户名
+    async def _cmd_b50(self, user_id: str, args: str) -> str:
         username = args.strip()
-
-        # 2. 加载绑定信息
-        bound = await get_user(wxid)
+        bound = await get_user(user_id)
         personal_token = bound["df_token"] if bound else None
 
         if not username:
-            # 没给用户名 → 必须已绑定
             if not bound or not bound["df_username"]:
                 return (
                     "你还未绑定查分器账号，请先:\n"
@@ -185,7 +179,6 @@ class MessageHandler:
                 )
             username = bound["df_username"]
 
-        # 3. 查询 & 渲染
         logger.info(f"查询 [{username}] (个人token: {'是' if personal_token else '否'})")
 
         try:
@@ -200,22 +193,33 @@ class MessageHandler:
                 logger.error(f"落雪查分也失败 [{username}]: {e2}")
                 return f"查询失败: {e2}"
 
-        # 4. 渲染图片
         theme = Theme(bound["theme"]) if bound and bound.get("theme") else Theme.PRISM_PLUS
         user_obj = User(service=service, theme=theme)
         b50_img = PlayerBest50(user_obj, player=player, best50=best50, is_username=True)
         b64 = await b50_img.draw()
 
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-            if b64.startswith("base64://"):
-                f.write(base64.b64decode(b64[len("base64://"):]))
-            elif "," in b64:
-                f.write(base64.b64decode(b64.split(",", 1)[1]))
-            else:
-                f.write(base64.b64decode(b64))
-            return f.name
+        # 解码 base64 → 临时文件
+        if b64.startswith("base64://"):
+            data = base64.b64decode(b64[len("base64://"):])
+        elif "," in b64:
+            data = base64.b64decode(b64.split(",", 1)[1])
+        else:
+            data = base64.b64decode(b64)
 
-    # ---- 歌曲搜索 ----
+        tmp = tempfile.NamedTemporaryFile(suffix=f"_{username}.png", delete=False)
+        tmp.write(data)
+        tmp.close()
+
+        # 保存到指定目录（如果配置了）
+        if botconfig.save_b50_dir:
+            out = os.path.join(botconfig.save_b50_dir, f"b50_{username}_{int(time.time())}.png")
+            with open(out, "wb") as f:
+                f.write(data)
+            logger.info(f"B50 图片已保存: {out}")
+
+        return tmp.name
+
+    # ── 歌曲搜索 ──
 
     def _cmd_search(self, keyword: str) -> str:
         if not keyword:
@@ -240,7 +244,7 @@ class MessageHandler:
             lines.append(f"{song.song_id}. {song.song_name} [{diffs}]")
         return f"搜索「{keyword}」:\n" + "\n".join(lines)
 
-    # ---- 随机 ----
+    # ── 随机 ──
 
     def _cmd_random(self) -> str:
         import random

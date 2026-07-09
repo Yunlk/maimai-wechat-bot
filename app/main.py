@@ -1,112 +1,98 @@
 """
-maimaiDX 微信查分机器人 — FastAPI 主服务
-接收 Gewechat 消息回调，调用 handler 处理，返回结果
+maimai-wechat-bot 入口
+WeChatFerry 集成版 — 在 Windows 上本地运行
 """
+import asyncio
 import os
-from contextlib import asynccontextmanager
+import signal
+import sys
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from wcferry.wxmsg import WxMsg
 
-from .config import botconfig, geweconfig
-from .database import init_db, set_db_path
-from .gewechat_client import GewechatClient
+from .config import log, wcfconfig
 from .handler import MessageHandler
-from .log import logger
-from .resources import data_dir
+from .wcf_bot import WcfBot
 
 
-gewe: GewechatClient = None
-handler: MessageHandler = None
+async def main():
+    log.info("=" * 50)
+    log.info("maimai-wechat-bot 启动中 (WeChatFerry 模式)")
+    log.info("=" * 50)
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global gewe, handler
-    logger.info("maimaiDX WeChat Bot 启动中...")
-
-    # 初始化数据库
-    set_db_path(data_dir / "users.db")
-    await init_db()
-
-    gewe = GewechatClient()
-    handler = MessageHandler(gewe)
-
-    # 预初始化数据
+    # 先加载曲目数据
+    handler = MessageHandler()
     await handler.init_data()
 
-    # 设置 Gewechat 回调
-    callback_url = geweconfig.gewechat_callback_url
-    if callback_url:
+    # 初始化 WeChatFerry
+    bot = WcfBot(
+        host=wcfconfig.wcf_host or None,
+        port=wcfconfig.wcf_port,
+        debug=wcfconfig.wcf_debug,
+    )
+
+    # 消息回调
+    async def on_msg(msg: WxMsg):
         try:
-            await gewe.set_callback(callback_url)
-            logger.success(f"Gewechat 回调已设置: {callback_url}")
-        except Exception as e:
-            logger.warning(f"设置回调失败: {e}")
-    else:
-        logger.info("未配置回调地址，跳过自动设置。请手动在 Gewechat 控制台设置回调。")
+            result = handler.handle(msg)
+            if not result:
+                return
 
-    yield
+            # 确定回复目标：群消息→群，单聊→发送者
+            receiver = msg.roomid if msg.from_group() else msg.sender
+            aters = bot.get_aters(msg)
 
-    logger.info("maimaiDX WeChat Bot 关闭")
-    if gewe:
-        await gewe.close()
-
-
-app = FastAPI(title="maimaiDX WeChat Bot", lifespan=lifespan)
-
-
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-
-
-@app.post("/webhook")
-async def webhook(request: Request):
-    """接收 Gewechat 消息回调"""
-    try:
-        msg = await request.json()
-    except Exception:
-        return JSONResponse({"error": "invalid json"}, status_code=400)
-
-    # Gewechat 的 msgType: 1=文本, 3=图片, 34=语音, 49=引用/小程序等
-    data = msg.get("data") or msg
-    msg_type = data.get("msgType", 0)
-
-    # 只处理文本消息
-    if msg_type != 1:
-        return JSONResponse({"status": "ignored"})
-
-    try:
-        result = await handler.handle(msg)
-    except Exception as e:
-        logger.error(f"处理消息异常: {e}")
-        return JSONResponse({"status": "error", "message": str(e)})
-
-    if result is None:
-        return JSONResponse({"status": "no_reply"})
-
-    from_wxid = data.get("fromWxid", "")
-
-    # 判断是图片路径还是文本
-    if result.endswith(".png") and os.path.isfile(result):
-        await gewe.send_image(from_wxid, result)
-        # 清理临时文件
-        try:
-            os.remove(result)
+            if result.lower().endswith(".png"):
+                # 图片回复
+                status = await bot.send_image(result, receiver)
+                if status == 0:
+                    log.success(f"已发送 B50 图片 → {receiver}")
+                else:
+                    log.error(f"图片发送失败(status={status})")
+                # 清理临时文件
+                try:
+                    os.unlink(result)
+                except OSError:
+                    pass
+            else:
+                # 文本回复
+                await bot.send_text(result, receiver, aters)
         except Exception:
-            pass
-    else:
-        await gewe.send_text(from_wxid, result)
+            log.exception(f"处理消息异常: {msg.content[:50]}")
 
-    return JSONResponse({"status": "ok"})
+    bot.on_message(on_msg)
+
+    await bot.start()
+    log.success(f"Bot 已上线，监听消息中... (wxid: {bot.wxid})")
+
+    # 等待退出信号
+    stop_event = asyncio.Event()
+
+    def _on_signal():
+        log.info("收到退出信号")
+        stop_event.set()
+
+    try:
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, _on_signal)
+            except NotImplementedError:
+                pass  # Windows 不支持 SIGTERM
+    except Exception:
+        pass
+
+    # 启动消息轮询
+    poll_task = asyncio.create_task(bot.run_forever())
+
+    await stop_event.wait()
+    bot.stop()
+    poll_task.cancel()
+    log.info("Bot 已退出")
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "app.main:app",
-        host=botconfig.webhook_host,
-        port=botconfig.webhook_port,
-        reload=False,
-    )
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        log.info("强行退出")
+        sys.exit(0)

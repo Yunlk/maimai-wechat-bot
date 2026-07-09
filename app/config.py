@@ -1,6 +1,6 @@
 """
-maimai-wechat-bot 配置
-去掉 HoshinoBot 依赖，使用 pydantic-settings + .env
+maimai-wechat-bot 配置 — WeChatFerry 版本
+使用 pydantic-settings + .env
 """
 from pathlib import Path
 from typing import Optional
@@ -43,18 +43,16 @@ class LxnsConfig(Settings):
     redirect_uri: Optional[str] = None
 
 
-class GewechatConfig(Settings):
-    """Gewechat 配置"""
-    gewechat_base_url: str = "http://localhost:2531"
-    gewechat_token: str = ""
-    gewechat_callback_url: str = ""
-    gewechat_app_id: str = ""
+class WcfConfig(Settings):
+    """WeChatFerry 配置"""
+    wcf_host: str = ""      # 远程 wcf 地址（留空=本地启动）
+    wcf_port: int = 10086   # wcf RPC 端口
+    wcf_debug: bool = False
 
 
 class BotConfig(Settings):
-    """机器人配置"""
-    webhook_host: str = "0.0.0.0"
-    webhook_port: int = 8080
+    """服务配置"""
+    save_b50_dir: str = ""  # B50 图片本地保存目录（留空不保存）
 
 
 from .log import logger as log  # noqa: E402
@@ -62,5 +60,5 @@ from .log import logger as log  # noqa: E402
 maiconfig = BaseConfig()
 dfconfig = DivingFishConfig()
 lxnsconfig = LxnsConfig()
-geweconfig = GewechatConfig()
+wcfconfig = WcfConfig()
 botconfig = BotConfig()

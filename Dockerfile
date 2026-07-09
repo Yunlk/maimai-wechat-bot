@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
-LABEL org.opencontainers.image.title="maimaiDX WeChat Bot"
-LABEL org.opencontainers.image.description="舞萌DX 微信查分机器人，基于Gewechat"
+LABEL org.opencontainers.image.title="maimaiDX WeBot"
+LABEL org.opencontainers.image.description="舞萌DX 查分机器人，企业微信智能机器人长连接模式"
 
 # 换阿里云 Debian 源（国内加速）
 RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
@@ -27,7 +27,5 @@ COPY . .
 RUN mkdir -p /app/logs /app/static/data \
     /app/static/mai/plate_version /app/static/mai/plate_table /app/static/mai/rating_table
 
-EXPOSE 8080
-
-# 启动时先初始化静态资源（占位），然后启动服务
-CMD ["sh", "-c", "python -m uvicorn app.main:app --host 0.0.0.0 --port ${WEBHOOK_PORT:-8080}"]
+# 长连接模式，无需暴露端口（WebSocket 向外连接）
+CMD ["python", "-m", "app.main"]

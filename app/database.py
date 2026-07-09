@@ -26,7 +26,7 @@ async def init_db() -> None:
             df_token   TEXT,
             friend_code INTEGER,
             service    TEXT DEFAULT 'DIVINGFISH',
-            theme      TEXT DEFAULT 'PRISM_PLUS'
+            theme      TEXT DEFAULT 'prism_plus'
         )
     """)
     await db.commit()
