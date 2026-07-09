@@ -23,6 +23,18 @@ logs/
 static/temp_pie.html
 static/data/*.json
 
+# 静态素材（二进制大文件，服务器单独下载）
+static/mai/cover/
+static/mai/pic/
+static/mai/shougou/
+static/mai/plate_version/
+static/mai/plate_table/
+static/mai/rating_table/
+static/mai/icon/
+static/mai/plate/
+static/font/
+static/echarts.min.js
+
 # OS
 .DS_Store
 Thumbs.db

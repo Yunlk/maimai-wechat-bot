@@ -78,8 +78,7 @@ class AssetsImage:
 
     def __init__(self) -> None:
         """静态资源类"""
-        if not maiconfig.save_in_memory:
-            self._load_image()
+        self._load_image()
 
     @staticmethod
     def _open_image(path: Path) -> Image.Image:
