@@ -1,7 +1,7 @@
 services:
   # ============= Gewechat (微信 iPad 协议) =============
   gewechat:
-    image: gewechat/gewechat:latest
+    image: registry.cn-hangzhou.aliyuncs.com/gewe/gewe:latest
     container_name: gewechat
     restart: unless-stopped
     ports:
