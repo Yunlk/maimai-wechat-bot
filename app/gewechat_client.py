@@ -14,9 +14,9 @@ class GewechatClient:
     """Gewechat REST API 封装"""
 
     def __init__(self):
-        self.base_url = geweconfig.gewchat_base_url.rstrip("/")
-        self.token = geweconfig.gewchat_token
-        self.app_id = geweconfig.gewchat_app_id
+        self.base_url = geweconfig.gewechat_base_url.rstrip("/")
+        self.token = geweconfig.gewechat_token
+        self.app_id = geweconfig.gewechat_app_id
         self._client = httpx.AsyncClient(timeout=30)
 
     # ---- 登录 ----

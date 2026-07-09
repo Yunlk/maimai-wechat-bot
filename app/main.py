@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
     await handler.init_data()
 
     # 设置 Gewechat 回调
-    callback_url = geweconfig.gewchat_callback_url
+    callback_url = geweconfig.gewechat_callback_url
     if callback_url:
         try:
             await gewe.set_callback(callback_url)
