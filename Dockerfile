@@ -17,10 +17,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
 
-# 安装 Playwright Chromium
-RUN python -m playwright install chromium --with-deps 2>/dev/null || \
-    python -m playwright install chromium 2>/dev/null || \
-    echo "Playwright 浏览器安装跳过（非核心功能）"
+# Playwright 浏览器国内下载太慢，跳过（仅 qq 头像功能用到，不影响核心查分）
+RUN echo "Skip playwright browser install"
 
 # 复制应用代码
 COPY . .
