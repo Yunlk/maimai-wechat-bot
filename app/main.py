@@ -9,9 +9,11 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from .config import botconfig, geweconfig
+from .database import init_db, set_db_path
 from .gewechat_client import GewechatClient
 from .handler import MessageHandler
 from .log import logger
+from .resources import data_dir
 
 
 gewe: GewechatClient = None
@@ -22,6 +24,10 @@ handler: MessageHandler = None
 async def lifespan(app: FastAPI):
     global gewe, handler
     logger.info("maimaiDX WeChat Bot 启动中...")
+
+    # 初始化数据库
+    set_db_path(data_dir / "users.db")
+    await init_db()
 
     gewe = GewechatClient()
     handler = MessageHandler(gewe)

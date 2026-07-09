@@ -17,11 +17,11 @@ class DivingFishAPI(ApiClient):
     proxy_url = "https://proxy.yuzuchan.site"
     base_url = "https://maimai.diving-fish.com/api/maimaidxprober"
 
-    def __init__(self, qqid: int | None = None, username: str | None = None):
+    def __init__(self, qqid: int | None = None, username: str | None = None, token: str | None = None):
         super().__init__(
             base_url="https://maimai.diving-fish.com/api/maimaidxprober",
-            headers={"developer-token": dfconfig.divingfish_token}
-            if dfconfig.divingfish_token
+            headers={"developer-token": token or dfconfig.divingfish_token}
+            if (token or dfconfig.divingfish_token)
             else None,
         )
         self.json = {}
