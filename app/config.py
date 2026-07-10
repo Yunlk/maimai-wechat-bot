@@ -44,10 +44,15 @@ class LxnsConfig(Settings):
 
 
 class WcfConfig(Settings):
-    """WeChatFerry 配置"""
+    """WeChatFerry 配置（已弃用，保留兼容）"""
     wcf_host: str = ""      # 远程 wcf 地址（留空=本地启动）
     wcf_port: int = 10086   # wcf RPC 端口
     wcf_debug: bool = False
+
+
+class BridgeConfig(Settings):
+    """WeChatAuto .NET 桥接配置"""
+    bridge_url: str = "http://localhost:60443"
 
 
 class BotConfig(Settings):
@@ -61,4 +66,5 @@ maiconfig = BaseConfig()
 dfconfig = DivingFishConfig()
 lxnsconfig = LxnsConfig()
 wcfconfig = WcfConfig()
+bridge_config = BridgeConfig()
 botconfig = BotConfig()

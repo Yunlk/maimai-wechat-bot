@@ -1,4 +1,5 @@
-wcferry>=39.6.0
+# wcferry (已弃用，替换为 WeChatAuto .NET 桥接)
+# wcferry>=39.6.0
 aiosqlite>=0.21.0
 aiohttp>=3.10.0
 httpx>=0.28.1

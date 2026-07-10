@@ -1,37 +1,31 @@
 """
 maimai-wechat-bot 入口
-WeChatFerry 集成版 — 在 Windows 上本地运行
+WeChatAuto 桥接版 — .NET 桥接 + Python Bot
 """
 import asyncio
 import os
 import signal
 import sys
 
-from wcferry.wxmsg import WxMsg
-
-from .config import log, wcfconfig
+from .bridge_client import BridgeClient, BridgeMsg
+from .config import log, bridge_config
 from .handler import MessageHandler
-from .wcf_bot import WcfBot
 
 
 async def main():
     log.info("=" * 50)
-    log.info("maimai-wechat-bot 启动中 (WeChatFerry 模式)")
+    log.info("maimai-wechat-bot 启动中 (WeChatAuto 桥接模式)")
     log.info("=" * 50)
 
     # 先加载曲目数据
     handler = MessageHandler()
     await handler.init_data()
 
-    # 初始化 WeChatFerry
-    bot = WcfBot(
-        host=wcfconfig.wcf_host or None,
-        port=wcfconfig.wcf_port,
-        debug=wcfconfig.wcf_debug,
-    )
+    # 连接 .NET 桥接程序
+    bot = BridgeClient(base_url=bridge_config.bridge_url)
 
     # 消息回调
-    async def on_msg(msg: WxMsg):
+    async def on_msg(msg: BridgeMsg):
         try:
             result = handler.handle(msg)
             if not result:
@@ -39,7 +33,6 @@ async def main():
 
             # 确定回复目标：群消息→群，单聊→发送者
             receiver = msg.roomid if msg.from_group() else msg.sender
-            aters = bot.get_aters(msg)
 
             if result.lower().endswith(".png"):
                 # 图片回复
@@ -55,14 +48,14 @@ async def main():
                     pass
             else:
                 # 文本回复
-                await bot.send_text(result, receiver, aters)
+                await bot.send_text(result, receiver)
         except Exception:
             log.exception(f"处理消息异常: {msg.content[:50]}")
 
     bot.on_message(on_msg)
 
     await bot.start()
-    log.success(f"Bot 已上线，监听消息中... (wxid: {bot.wxid})")
+    log.success(f"Bot 已上线，监听消息中... (桥接: {bridge_config.bridge_url})")
 
     # 等待退出信号
     stop_event = asyncio.Event()
@@ -77,7 +70,7 @@ async def main():
             try:
                 loop.add_signal_handler(sig, _on_signal)
             except NotImplementedError:
-                pass  # Windows 不支持 SIGTERM
+                pass
     except Exception:
         pass
 
@@ -85,7 +78,7 @@ async def main():
     poll_task = asyncio.create_task(bot.run_forever())
 
     await stop_event.wait()
-    bot.stop()
+    await bot.close()
     poll_task.cancel()
     log.info("Bot 已退出")
 

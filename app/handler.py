@@ -1,6 +1,6 @@
 """
 消息处理器 — 指令路由 + 查分逻辑
-WeChatFerry 版本
+WeChatAuto 桥接版本
 """
 import asyncio
 import base64
@@ -8,8 +8,7 @@ import os
 import tempfile
 import time
 
-from wcferry.wxmsg import WxMsg
-
+from .bridge_client import BridgeMsg
 from .config import botconfig, maiconfig
 from .core.image import PlayerBest50
 from .core.merge.models import ServiceName, Theme
@@ -40,7 +39,7 @@ class MessageHandler:
             except Exception as e:
                 logger.error(f"数据初始化失败: {e}")
 
-    def handle(self, msg: WxMsg) -> str | None:
+    def handle(self, msg: BridgeMsg) -> str | None:
         """
         同步分发入口（handler 内部用 asyncio.run 跑异步命令）
         返回: 文本字符串, 图片文件路径, 或 None

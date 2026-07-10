@@ -3,6 +3,7 @@ WeChatFerry 异步封装 — 消息轮询 + 收发
 """
 import asyncio
 import os
+import queue
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -57,6 +58,9 @@ class WcfBot:
                     except Exception:
                         logger.exception("消息回调异常")
                 await asyncio.sleep(0.3)
+            except queue.Empty:
+                # 消息队列空超时 —— 正常情况，不报错
+                pass
             except Exception:
                 logger.exception("消息轮询错误")
                 await asyncio.sleep(1)
