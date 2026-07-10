@@ -1,5 +1,5 @@
 """
-maimai-wechat-bot 配置 — WeChatFerry 版本
+maimai-wechat-bot 配置 — WeChatAuto .NET 桥接版本
 使用 pydantic-settings + .env
 """
 from pathlib import Path
